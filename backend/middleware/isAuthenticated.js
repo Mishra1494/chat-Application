@@ -1,26 +1,38 @@
 import jwt from "jsonwebtoken";
-import user from "../models/userModels.js";
+import User from "../models/userModels.js";
 
-const isAuthenticated = async(req,res,next)=>{
-    try{
-        const token = req.cookies.token || req.header("Authorization")?.replace("Bearer "," ");
-        if(!token){
-            return res.status(500).json({success : false , message : "Unauthorized user " });
-        }
-        const decode = jwt.verify(token,process.env.JWT_SECRET);
-        if(!decode){
-            return res.status(500,json({success :  false , message : "Unauthorized user - Invalid token"}));
-        }
-        const User = await user.findById(decode.id).select("-password");
-        if(!User){
-            return  res.status(500).json({success : false, message : "Unauthorized user - User not found"});
-        }
-                req.user = User;
-                next();
-    }catch(error){
-        res.status(500).json({success:false, message : error.message});
+const isAuthenticated = async (req, res, next) => {
+  try {
+    const token =
+      req.cookies?.token ||
+      req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: No token provided",
+      });
     }
-}
 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User not found",
+      });
+    }
+
+    req.user = user;
+    
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: Invalid or expired token",
+    });
+  }
+};
 
 export default isAuthenticated;
