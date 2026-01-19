@@ -4,6 +4,10 @@ import express from "express";
 import dbConnect from "./DB/DBConnect.js";
 import authRoutes from "./routes/auth.js";
 import messageRoutes from "./routes/messageRoutes.js";
+import cookieParser from "cookie-parser";
+import authUserRoutes from "./routes/authUser.js";
+
+
 
 const app = express();
 
@@ -15,6 +19,7 @@ app.use(express.json());
 
  app.use('/api/auth', authRoutes);
  app.use('/api/messages',messageRoutes);
+ app.use('/api/user',authUserRoutes);
 app.listen('8080',()=>{
     dbConnect();
     console.log("working");
