@@ -18,13 +18,13 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // console.log("Submitting form:", form);
+  
     try {
       const res = await API.post("/auth/login", form, {
         withCredentials: true,
       });
 
-      // backend se user aa raha hai
+    
       console.log("Login response:", res.data);
       setUser(res.data.user);
 

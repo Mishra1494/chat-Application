@@ -30,7 +30,7 @@ const Chat = () => {
       const res = await API.get("/user/getCurrentUser", {
         withCredentials: true,
       });
-      console.log("Current user data:", res.data.users);
+    //   console.log("Current user data:", res.data.users);
       setUsers(res.data.users);
     } catch (err) {
       console.log(err);
@@ -40,18 +40,20 @@ const Chat = () => {
   // 💬 get messages
   const getMessages = async (receiverId) => {
     try {
-      const res = await API.get(`/messages/get/${receiverId}`, {
-        withCredentials: true,
-      });
-      setMessages(res.data.messages);
-    } catch (err) {
-      console.log(err);
-    }
+    const res = await API.get(
+      `/conversations/${receiverId}`,
+      { withCredentials: true }
+    );
+    console.log("Messages:", res.data);
+    setMessages(res.data.messages);
+  } catch (err) {
+    console.log(err);
+  }
   };
 
   // ✉️ send message
   const sendMessage = async () => {
-    if (!newMessage) return;
+    if (!newMessage || !currentChatUser) return;
     try {
         
       const res = await API.post(
@@ -71,7 +73,7 @@ const Chat = () => {
     getChatUsers();
   }, []);
 
-  return (
+ return (
     <div style={{ display: "flex", height: "100vh" }}>
       {/* LEFT SIDEBAR */}
       <div style={{ width: "30%", borderRight: "1px solid gray", padding: 10 }}>
@@ -87,7 +89,12 @@ const Chat = () => {
         {users.map((u) => (
           <div
             key={u._id}
-            style={{ padding: 5, cursor: "pointer" }}
+            style={{
+              padding: 6,
+              cursor: "pointer",
+              backgroundColor:
+                currentChatUser?._id === u._id ? "#eee" : "transparent",
+            }}
             onClick={() => {
               setCurrentChatUser(u);
               getMessages(u._id);
@@ -104,26 +111,53 @@ const Chat = () => {
           <>
             <h3>Chat with {currentChatUser.fullname}</h3>
 
-            <div style={{ height: "80%", overflowY: "auto" }}>
-              {messages.map((msg) => (
-                <div
-                  key={msg._id}
-                  style={{
-                    textAlign:
-                      msg.senderId?.toString() === user?._id?.toString() ? "right" : "left",
-                  }}
-                >
-                  <p>{msg.message}</p>
-                </div>
-              ))}
+            <div
+              style={{
+                height: "75vh",
+                overflowY: "auto",
+                border: "1px solid #ccc",
+                padding: 10,
+                marginBottom: 10,
+              }}
+            >
+              {messages.map((msg) => {
+                const isMe =
+                  msg.senderId?.toString() === user?._id?.toString();
+                  console.log("Message senderId:", msg.senderId, "Current userId:", user, "isMe:", isMe);
+
+                return (
+                  <div
+                    key={msg._id}
+                    style={{
+                      display: "flex",
+                      justifyContent: isMe ? "flex-end" : "flex-start",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: isMe ? "#DCF8C6" : "#EAEAEA",
+                        padding: "8px 12px",
+                        borderRadius: 12,
+                        maxWidth: "60%",
+                      }}
+                    >
+                      {msg.message}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            <input
-              placeholder="Type message..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-            />
-            <button onClick={sendMessage}>Send</button>
+            <div style={{ display: "flex", gap: 5 }}>
+              <input
+                style={{ flex: 1 }}
+                placeholder="Type message..."
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+              />
+              <button onClick={sendMessage}>Send</button>
+            </div>
           </>
         ) : (
           <h3>Select a user to chat</h3>
@@ -132,5 +166,6 @@ const Chat = () => {
     </div>
   );
 };
+
 
 export default Chat;
