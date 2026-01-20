@@ -7,6 +7,7 @@ import messageRoutes from "./routes/messageRoutes.js";
 import cookieParser from "cookie-parser";
 import authUserRoutes from "./routes/authUser.js";
 import cors from "cors";
+import conversationRoutes from "./routes/conversationRoutes.js";
 
 
 
@@ -29,6 +30,7 @@ app.use(cookieParser());
  app.use('/api/auth', authRoutes);
  app.use('/api/messages',messageRoutes);
  app.use('/api/user',authUserRoutes);
+ app.use('/api/conversations', conversationRoutes);
 app.listen('8080',()=>{
     dbConnect();
     console.log("working");
