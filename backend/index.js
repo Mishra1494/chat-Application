@@ -8,10 +8,8 @@ import cookieParser from "cookie-parser";
 import authUserRoutes from "./routes/authUser.js";
 import cors from "cors";
 import conversationRoutes from "./routes/conversationRoutes.js";
+import {app,httpServer} from "./Socket/socket.js";
 
-
-
-const app = express();
 
 app.get('/' , (req,res)=>{
     res.send("hellow");
@@ -31,7 +29,7 @@ app.use(cookieParser());
  app.use('/api/messages',messageRoutes);
  app.use('/api/user',authUserRoutes);
  app.use('/api/conversations', conversationRoutes);
-app.listen('8080',()=>{
+httpServer.listen('8080',()=>{
     dbConnect();
     console.log("working");
 })

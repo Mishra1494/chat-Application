@@ -1,84 +1,162 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import API from "../api/axious";
 import { useAuth } from "../context/AuthContext";
+import { useSocketContext } from "../context/socketContext";
 
 const Chat = () => {
   const { user } = useAuth();
+  const { socket, onlineUser } = useSocketContext();
 
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState([]);
   const [currentChatUser, setCurrentChatUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
-  // 🔍 search users
+  const typingTimeoutRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  // ---------------- USERS ----------------
   const searchUsers = async () => {
-    if (!search) return;
-    try {
-      const res = await API.get(`/user/SearchUser?search=${search}`, {
-        withCredentials: true,
-      });
-      setUsers(res.data.user);
-    } catch (err) {
-      console.log(err);
-    }
+    if (!search.trim()) return;
+    const res = await API.get(`/user/SearchUser?search=${search}`, {
+      withCredentials: true,
+    });
+    setUsers(res.data.user || []);
   };
 
-  // 🧑‍🤝‍🧑 get existing chats
   const getChatUsers = async () => {
-    try {
-      const res = await API.get("/user/getCurrentUser", {
-        withCredentials: true,
-      });
-    //   console.log("Current user data:", res.data.users);
-      setUsers(res.data.users);
-    } catch (err) {
-      console.log(err);
-    }
+    const res = await API.get("/user/getCurrentUser", {
+      withCredentials: true,
+    });
+    setUsers(res.data.users || []);
   };
 
-  // 💬 get messages
+  // ---------------- MESSAGES ----------------
   const getMessages = async (receiverId) => {
-    try {
-    const res = await API.get(
-      `/conversations/${receiverId}`,
+    const res = await API.get(`/conversations/${receiverId}`, {
+      withCredentials: true,
+    });
+    setMessages(res.data.messages || []);
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !currentChatUser) return;
+
+    const res = await API.post(
+      `/messages/send/${currentChatUser._id}`,
+      { message: newMessage },
       { withCredentials: true }
     );
-    console.log("Messages:", res.data);
-    setMessages(res.data.messages);
-  } catch (err) {
-    console.log(err);
-  }
+
+    setMessages((prev) => [...prev, res.data.newMessage]);
+    setNewMessage("");
+
+    socket.emit("stopTyping", {
+      receiverId: currentChatUser._id,
+    });
   };
 
-  // ✉️ send message
-  const sendMessage = async () => {
-    if (!newMessage || !currentChatUser) return;
-    try {
-        
-      const res = await API.post(
-        `/messages/send/${currentChatUser._id}`,
-        { message: newMessage },
-        { withCredentials: true }
+  // ---------------- SOCKET LISTENERS ----------------
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = (msg) => {
+      if (
+        currentChatUser &&
+        (msg.senderId === currentChatUser._id ||
+          msg.receiverId === currentChatUser._id)
+      ) {
+        setMessages((prev) => [...prev, msg]);
+      }
+    };
+
+    const handleTyping = ({ senderId }) => {
+      if (senderId === currentChatUser?._id) {
+        setIsTyping(true);
+      }
+    };
+
+    const handleStopTyping = ({ senderId }) => {
+      if (senderId === currentChatUser?._id) {
+        setIsTyping(false);
+      }
+    };
+
+    const handleMessageSeen = ({ messageId }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === messageId ? { ...m, status: "seen" } : m
+        )
       );
-      
-      setMessages((prev) => [...prev, res.data.newMessage]);
-      setNewMessage("");
-    } catch (err) {
-      console.log(err);
+    };
+
+    socket.on("newMessage", handleNewMessage);
+    socket.on("typing", handleTyping);
+    socket.on("stopTyping", handleStopTyping);
+    socket.on("messageSeen", handleMessageSeen);
+
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+      socket.off("typing", handleTyping);
+      socket.off("stopTyping", handleStopTyping);
+      socket.off("messageSeen", handleMessageSeen);
+    };
+  }, [socket, currentChatUser]);
+
+  // ---------------- SEEN EMIT (IMPORTANT FIX) ----------------
+  useEffect(() => {
+  if (!socket || !currentChatUser || !user?._id) return;
+
+  messages.forEach((msg) => {
+    if (
+      msg.receiverId === user._id &&
+      msg.senderId === currentChatUser._id &&
+      msg.status !== "seen"
+    ) {
+      socket.emit("messageSeen", {
+        messageId: msg._id,
+        senderId: msg.senderId,
+      });
     }
+  });
+}, [messages, socket, currentChatUser, user]);
+
+
+  // ---------------- TYPING EMIT ----------------
+  const handleTyping = (e) => {
+    setNewMessage(e.target.value);
+
+    if (!socket || !currentChatUser) return;
+
+    socket.emit("typing", {
+      receiverId: currentChatUser._id,
+    });
+
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stopTyping", {
+        receiverId: currentChatUser._id,
+      });
+    }, 700);
   };
+
+  // ---------------- SCROLL ----------------
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   useEffect(() => {
     getChatUsers();
   }, []);
 
- return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      {/* LEFT SIDEBAR */}
-      <div style={{ width: "30%", borderRight: "1px solid gray", padding: 10 }}>
-        <h3>Users</h3>
+  const isOnline = (id) => onlineUser?.includes(id);
 
+  return (
+    <div style={{ display: "flex", height: "100vh" }}>
+      {/* LEFT */}
+      <div style={{ width: "30%", borderRight: "1px solid gray", padding: 10 }}>
         <input
           placeholder="Search user..."
           value={search}
@@ -89,83 +167,66 @@ const Chat = () => {
         {users.map((u) => (
           <div
             key={u._id}
-            style={{
-              padding: 6,
-              cursor: "pointer",
-              backgroundColor:
-                currentChatUser?._id === u._id ? "#eee" : "transparent",
-            }}
             onClick={() => {
               setCurrentChatUser(u);
               getMessages(u._id);
             }}
           >
             {u.fullname}
+            <span
+              style={{
+                marginLeft: 6,
+                color: isOnline(u._id) ? "green" : "gray",
+              }}
+            >
+              ●
+            </span>
           </div>
         ))}
       </div>
 
-      {/* CHAT AREA */}
+      {/* CHAT */}
       <div style={{ width: "70%", padding: 10 }}>
-        {currentChatUser ? (
+        {currentChatUser && (
           <>
-            <h3>Chat with {currentChatUser.fullname}</h3>
+            <h3>
+              {currentChatUser.fullname}{" "}
+              {isOnline(currentChatUser._id) && "🟢"}
+            </h3>
 
-            <div
-              style={{
-                height: "75vh",
-                overflowY: "auto",
-                border: "1px solid #ccc",
-                padding: 10,
-                marginBottom: 10,
-              }}
-            >
+            {isTyping && <p>typing...</p>}
+
+            <div style={{ height: "75vh", overflowY: "auto" }}>
               {messages.map((msg) => {
-                const isMe =
-                  msg.senderId?.toString() === user?._id?.toString();
-                  console.log("Message senderId:", msg.senderId, "Current userId:", user, "isMe:", isMe);
-
+                const isMe = msg.senderId === user._id;
                 return (
                   <div
                     key={msg._id}
-                    style={{
-                      display: "flex",
-                      justifyContent: isMe ? "flex-end" : "flex-start",
-                      marginBottom: 6,
-                    }}
+                    style={{ textAlign: isMe ? "right" : "left" }}
                   >
-                    <div
-                      style={{
-                        background: isMe ? "#DCF8C6" : "#EAEAEA",
-                        padding: "8px 12px",
-                        borderRadius: 12,
-                        maxWidth: "60%",
-                      }}
-                    >
-                      {msg.message}
-                    </div>
+                    <div>{msg.message}</div>
+                    {isMe && (
+                      <small>
+                        {msg.status === "seen" ? "Seen" : "Delivered"}
+                      </small>
+                    )}
                   </div>
                 );
               })}
+              <div ref={bottomRef} />
             </div>
 
-            <div style={{ display: "flex", gap: 5 }}>
-              <input
-                style={{ flex: 1 }}
-                placeholder="Type message..."
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-              />
-              <button onClick={sendMessage}>Send</button>
-            </div>
+            <input
+              value={newMessage}
+              onChange={handleTyping}
+              placeholder="Type message..."
+            />
+            <button onClick={sendMessage}>Send</button>
           </>
-        ) : (
-          <h3>Select a user to chat</h3>
         )}
       </div>
     </div>
   );
 };
-
 
 export default Chat;

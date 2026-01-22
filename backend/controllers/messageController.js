@@ -1,5 +1,7 @@
 import Message from "../models/messageSchema.js";
 import Conversation from "../models/conversationModels.js";
+import { get } from "mongoose";
+import {getReciverSocketId,io} from "../Socket/socket.js";
 
 
 export const sendMessage = async(req,res)=>{
@@ -29,9 +31,14 @@ export const sendMessage = async(req,res)=>{
             Chats.message.push(newMessage._id);
         }
 
-
-        // SOCKET.IO  function
         await Promise.all([Chats.save(),newMessage.save()]);
+        
+        // SOCKET.IO  function
+        const recieverSocketId = getReciverSocketId(recieverId);
+
+        if(recieverSocketId){
+            io.to(recieverSocketId).emit("newMessage",newMessage);
+        }
 
         res.status(201).json({success : true, message : "message sent successfully", newMessage});
 
